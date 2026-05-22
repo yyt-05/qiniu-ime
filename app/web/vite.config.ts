@@ -10,7 +10,19 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      exclude: ['src/main.tsx', 'src/vite-env.d.ts', 'vite.config.ts', 'playwright.config.ts', 'tests/**', 'dist/**'],
+      exclude: [
+        'src/app/layout.tsx',
+        'src/app/page.tsx',
+        'src/vite-env.d.ts',
+        'next-env.d.ts',
+        'vite.config.ts',
+        'playwright.config.ts',
+        'next.config.ts',
+        'postcss.config.mjs',
+        'tests/**',
+        'dist/**',
+        '.next/**'
+      ],
       thresholds: {
         lines: 75,
         functions: 70,

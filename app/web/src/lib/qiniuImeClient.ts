@@ -18,6 +18,7 @@ export type SessionOptions = {
   provider: Provider;
   postprocessMode: PostprocessMode;
   mockText: string;
+  format: 'mock' | 'webm';
 };
 
 export class QiniuImeClient {
@@ -51,7 +52,7 @@ export class QiniuImeClient {
           type: 'session.start',
           scene: options.scene,
           sampleRate: 16000,
-          format: 'pcm16',
+          format: options.format,
           enableMemory: true,
           provider: options.provider,
           postprocessMode: options.postprocessMode,
@@ -69,6 +70,15 @@ export class QiniuImeClient {
 
   sendAudio(seq: number, pcm = 'AA==') {
     this.send({ type: 'audio.chunk', seq, pcm });
+  }
+
+  async sendAudioBlob(seq: number, blob: Blob) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    for (const byte of bytes) {
+      binary += String.fromCharCode(byte);
+    }
+    this.sendAudio(seq, btoa(binary));
   }
 
   endAudio() {

@@ -1,0 +1,140 @@
+package local
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"time"
+	"qiniu-ime/server/domain"
+	"qiniu-ime/server/ports"
+)
+
+type Provider struct {
+	scriptPath string
+	python string
+	model string
+}
+
+func NewProvider() *Provider {
+	return &Provider{
+		scriptPath: firstExisting(os.Getenv("QINIU_IME_LOCAL_ASR_SCRIPT"), "tools/local_asr/transcribe.py", "../tools/local_asr/transcribe.py"),
+		python: valueOr(os.Getenv("QINIU_IME_LOCAL_ASR_PYTHON"), "py"),
+		model: valueOr(os.Getenv("QINIU_IME_LOCAL_ASR_MODEL"), "tiny"),
+	}
+}
+
+func (p *Provider) Name() string {
+	return "local"
+}
+
+func (p *Provider) Start(cfg domain.ASRSessionConfig) (ports.ASRStream, error) {
+	if os.Getenv("QINIU_IME_LOCAL_ASR_TEXT") == "" && p.scriptPath == "" {
+		return nil, errors.New("local whisper script is not configured")
+	}
+	if cfg.Format != "webm" && cfg.Format != "mock" {
+		return nil, fmt.Errorf("local provider only supports webm audio, got %s", cfg.Format)
+	}
+	return &Stream{provider: p, started: time.Now()}, nil
+}
+
+type Stream struct {
+	provider *Provider
+	started time.Time
+	chunks []string
+}
+
+func (s *Stream) SendAudio(chunk domain.AudioChunk) ([]domain.TranscriptEvent, error) {
+	s.chunks = append(s.chunks, chunk.PCM)
+	return []domain.TranscriptEvent{{
+		Type: "transcript.partial",
+		Seq: chunk.Seq,
+		Text: "正在本地识别...",
+		Provider: s.provider.Name(),
+		LatencyMs: int64(time.Since(s.started) / time.Millisecond),
+	}}, nil
+}
+
+func (s *Stream) End() ([]domain.TranscriptEvent, error) {
+	text := os.Getenv("QINIU_IME_LOCAL_ASR_TEXT")
+	if text == "" {
+		if len(s.chunks) == 0 {
+			return nil, errors.New("local provider received no audio")
+		}
+		var err error
+		text, err = s.transcribe()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return []domain.TranscriptEvent{{
+		Type: "transcript.final",
+		RawText: text,
+		Text: text,
+		Provider: s.provider.Name(),
+		LatencyMs: int64(time.Since(s.started) / time.Millisecond),
+	}}, nil
+}
+
+func (s *Stream) Close() error {
+	return nil
+}
+
+func (s *Stream) transcribe() (string, error) {
+	temp, err := os.CreateTemp("", "qiniu-ime-*.webm")
+	if err != nil {
+		return "", err
+	}
+	path := temp.Name()
+	defer os.Remove(path)
+	defer temp.Close()
+
+	for _, item := range s.chunks {
+		bytes, err := base64.StdEncoding.DecodeString(item)
+		if err != nil {
+			return "", fmt.Errorf("decode audio chunk: %w", err)
+		}
+		if _, err := temp.Write(bytes); err != nil {
+			return "", err
+		}
+	}
+	if err := temp.Close(); err != nil {
+		return "", err
+	}
+
+	cmd := exec.Command(s.provider.python, "-3.12", s.provider.scriptPath, "--model", s.provider.model, "--language", "zh", path)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("local whisper failed: %w: %s", err, string(output))
+	}
+	var result struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(output, &result); err != nil {
+		return "", fmt.Errorf("parse local whisper output: %w: %s", err, string(output))
+	}
+	return result.Text, nil
+}
+
+func firstExisting(values ...string) string {
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		cleaned := filepath.Clean(value)
+		if _, err := os.Stat(cleaned); err == nil {
+			return cleaned
+		}
+	}
+	return ""
+}
+
+func valueOr(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}

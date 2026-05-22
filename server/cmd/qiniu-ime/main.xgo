@@ -7,6 +7,7 @@ import (
 	"qiniu-ime/server/api"
 	"qiniu-ime/server/application"
 	"qiniu-ime/server/infrastructure/provider/failing"
+	"qiniu-ime/server/infrastructure/provider/local"
 	"qiniu-ime/server/infrastructure/provider/mock"
 	"qiniu-ime/server/infrastructure/storage"
 	"qiniu-ime/server/ports"
@@ -20,7 +21,7 @@ func main() {
 		failing.NewProvider("aliyun"),
 		failing.NewProvider("tencent"),
 		failing.NewProvider("openai"),
-		failing.NewProvider("local"),
+		local.NewProvider(),
 	}
 	router := application.NewProviderRouter(providers)
 	sessionService := application.NewSessionService(router, store)
@@ -34,4 +35,3 @@ func main() {
 		panic(err)
 	}
 }
-

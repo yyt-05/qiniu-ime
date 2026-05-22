@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_QINIU_IME_API ?? 'http://127.0.0.1:8787';
+export const API_BASE = process.env.NEXT_PUBLIC_QINIU_IME_API ?? 'http://127.0.0.1:8787';
 
 export type MemoryTerm = {
   id?: string;
@@ -42,4 +42,3 @@ export async function fetchMetrics() {
   if (!response.ok) throw new Error(`metrics failed: ${response.status}`);
   return response.json();
 }
-
