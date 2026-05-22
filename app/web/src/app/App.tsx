@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Mic, Square, RotateCcw, Check, Plus, Activity } from 'lucide-react';
+import { Activity, Check, Gauge, Mic, Plus, RotateCcw, Square, Zap } from 'lucide-react';
 import { API_BASE, acceptCorrection, addMemoryTerm, fetchMemoryTerms, fetchMetrics, MemoryTerm } from '../lib/api';
 import { PostprocessMode, Provider, QiniuImeClient, TranscriptEvent } from '../lib/qiniuImeClient';
 
@@ -20,6 +20,13 @@ export function App() {
   const [terms, setTerms] = useState<MemoryTerm[]>([]);
   const [metrics, setMetrics] = useState<Record<string, unknown>>({});
   const client = useMemo(() => new QiniuImeClient(API_BASE), []);
+  const statusText: Record<Status, string> = {
+    idle: '待输入',
+    connecting: '连接中',
+    recording: '识别中',
+    final: '已生成',
+    error: '出错'
+  };
 
   useEffect(() => {
     void refreshMemory();
@@ -95,51 +102,58 @@ export function App() {
       <section className="hero">
         <div>
           <p className="eyebrow">qiniu-ime</p>
-          <h1>说得自然，写得准确</h1>
+          <h1>语音输入工作台</h1>
+          <p className="subtitle">边说边出字，专有名词自动修正，确认后进入个人记忆。</p>
         </div>
-        <div className={`status status-${status}`}>{status}</div>
+        <div className={`status status-${status}`}>{statusText[status]}</div>
       </section>
 
       <section className="workspace">
         <div className="panel transcript-panel">
-          <div className="toolbar">
-            <select aria-label="provider" value={provider} onChange={(e) => setProvider(e.target.value as Provider)}>
-              {['mock', 'auto', 'xfyun', 'aliyun', 'tencent', 'openai', 'local'].map((item) => (
-                <option key={item} value={item}>{item}</option>
+          <div className="control-grid">
+            <label>
+              ASR
+              <select aria-label="provider" value={provider} onChange={(e) => setProvider(e.target.value as Provider)}>
+                {['mock', 'auto', 'xfyun', 'aliyun', 'tencent', 'openai', 'local'].map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              场景
+              <select aria-label="scene" value={scene} onChange={(e) => setScene(e.target.value)}>
+                <option value="work">工作</option>
+                <option value="chat">聊天</option>
+                <option value="prompt">Prompt</option>
+              </select>
+            </label>
+            <label className="mock-input">
+              演示输入
+              <input value={mockText} onChange={(e) => setMockText(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="mode-row">
+            <span>后处理</span>
+            <div className="segmented" role="group" aria-label="postprocess mode">
+              {[
+                ['raw', '原声'],
+                ['light', '轻整理'],
+                ['clean', '清爽'],
+                ['logic', '逻辑修正']
+              ].map(([value, label]) => (
+                <button key={value} className={mode === value ? 'active' : ''} onClick={() => setMode(value as PostprocessMode)}>
+                  {label}
+                </button>
               ))}
-            </select>
-            <select aria-label="scene" value={scene} onChange={(e) => setScene(e.target.value)}>
-              <option value="work">工作</option>
-              <option value="chat">聊天</option>
-              <option value="prompt">Prompt</option>
-            </select>
+            </div>
           </div>
-
-          <div className="segmented" role="group" aria-label="postprocess mode">
-            {[
-              ['raw', '原声'],
-              ['light', '轻整理'],
-              ['clean', '清爽'],
-              ['logic', '逻辑修正']
-            ].map(([value, label]) => (
-              <button key={value} className={mode === value ? 'active' : ''} onClick={() => setMode(value as PostprocessMode)}>
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <label className="mock-input">
-            演示输入
-            <input value={mockText} onChange={(e) => setMockText(e.target.value)} />
-          </label>
 
           <div className="transcript-box" data-testid="transcript-box">
-            {finalText || partial || '点击麦克风开始语音输入'}
+            <span className={!finalText && !partial ? 'placeholder' : ''}>
+              {finalText || partial || '点击麦克风开始语音输入'}
+            </span>
           </div>
-
-          {rawText && <p className="raw">原始 ASR：{rawText}</p>}
-          {rules?.length ? <p className="rules">命中记忆：{rules.map((rule) => `${rule.from} -> ${rule.to}`).join('，')}</p> : null}
-          {error && <p className="error">{error}</p>}
 
           <div className="actions">
             <button className="primary" onClick={start} disabled={status === 'recording' || status === 'connecting'}>
@@ -155,14 +169,28 @@ export function App() {
               <Check size={18} /> 确认学习
             </button>
           </div>
+
+          <div className="compare-grid">
+            <div>
+              <span>原始 ASR</span>
+              <p className="raw">{rawText || partial || '等待识别结果'}</p>
+            </div>
+            <div>
+              <span>qiniu-ime 修正</span>
+              <p className="fixed">{finalText || '等待最终文本'}</p>
+            </div>
+          </div>
+
+          {rules?.length ? <p className="rules">命中记忆：{rules.map((rule) => `${rule.from} -> ${rule.to}`).join('，')}</p> : null}
+          {error && <p className="error">{error}</p>}
         </div>
 
         <aside className="side">
           <section className="panel">
-            <h2>指标</h2>
-            <div className="metric"><Activity size={16} /> 首/终延迟：{latency ?? '-'} ms</div>
-            <div className="metric">会话数：{String(metrics.sessions ?? '-')}</div>
-            <div className="metric">Provider 错误：{String(metrics.providerErrors ?? '-')}</div>
+            <h2>实时指标</h2>
+            <div className="metric"><Zap size={16} /> 延迟：{latency ?? '-'} ms</div>
+            <div className="metric"><Activity size={16} /> 会话数：{String(metrics.sessions ?? '-')}</div>
+            <div className="metric"><Gauge size={16} /> Provider 错误：{String(metrics.providerErrors ?? '-')}</div>
           </section>
 
           <section className="panel">
@@ -184,4 +212,3 @@ export function App() {
     </main>
   );
 }
-

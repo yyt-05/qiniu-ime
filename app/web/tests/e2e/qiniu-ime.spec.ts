@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('web workspace shows qiniu-ime UI', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByText('qiniu-ime')).toBeVisible();
+  await expect(page.getByText('qiniu-ime', { exact: true })).toBeVisible();
   await expect(page.getByTestId('transcript-box')).toContainText('点击麦克风');
 });
 

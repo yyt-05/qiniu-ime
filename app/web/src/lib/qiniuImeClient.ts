@@ -33,6 +33,19 @@ export class QiniuImeClient {
         reject(new Error('socket not initialized'));
         return;
       }
+      let settled = false;
+      this.socket.onmessage = (message) => {
+        const event = JSON.parse(message.data) as TranscriptEvent;
+        onEvent(event);
+        if (event.type === 'session.ready' && !settled) {
+          settled = true;
+          resolve();
+        }
+        if (event.type === 'error' && !settled) {
+          settled = true;
+          reject(new Error(event.error ?? 'session failed'));
+        }
+      };
       this.socket.onopen = () => {
         this.send({
           type: 'session.start',
@@ -44,11 +57,12 @@ export class QiniuImeClient {
           postprocessMode: options.postprocessMode,
           mockText: options.mockText
         });
-        resolve();
       };
-      this.socket.onerror = () => reject(new Error('websocket connection failed'));
-      this.socket.onmessage = (message) => {
-        onEvent(JSON.parse(message.data) as TranscriptEvent);
+      this.socket.onerror = () => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('websocket connection failed'));
+        }
       };
     });
   }
@@ -72,4 +86,3 @@ export class QiniuImeClient {
     this.socket.send(JSON.stringify(value));
   }
 }
-

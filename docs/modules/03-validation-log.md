@@ -21,7 +21,7 @@ This file is updated as implementation gates pass.
 
 - Build: passed, `pnpm build`.
 - Unit tests: passed, 5 tests.
-- Coverage: passed, statements/lines 96.68%, functions 88.88%, branches 76.11%.
+- Coverage: passed, statements/lines 96.44%, functions 88.88%, branches 78.48%.
 - E2E: passed, 3 Playwright tests using installed Chrome channel.
   - UI renders.
   - Mock ASR chain returns corrected text through XGo backend.
