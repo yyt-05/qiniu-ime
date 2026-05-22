@@ -32,7 +32,7 @@ Jobs:
 - `web`: installs dependencies, runs Next build and Vitest coverage.
 - `e2e`: builds XGo from source on Windows, installs Playwright Chromium, starts backend/frontend through Playwright webServer, runs browser E2E.
 
-Note: `go install github.com/goplus/xgo/cmd/xgo@latest` is not used in CI because it does not provide the full local XGo runtime expected by `xgo test` in this project. CI mirrors the Windows source-build workflow.
+Note: `go install github.com/goplus/xgo/cmd/xgo@latest` is not used in CI because it does not provide the full local XGo runtime expected by `xgo test` in this project. CI builds XGo from source with `make.bat`; on GitHub's Windows runner the installer links the tools into `%USERPROFILE%\go\bin`, so the workflow only appends that directory to `GITHUB_PATH`.
 
 ## Local Commands
 

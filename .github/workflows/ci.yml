@@ -20,10 +20,6 @@ jobs:
           git clone https://github.com/goplus/xgo.git "$env:RUNNER_TEMP\xgo-src"
           Set-Location "$env:RUNNER_TEMP\xgo-src"
           cmd /c make.bat
-          New-Item -ItemType Directory -Force "$env:USERPROFILE\go\bin" | Out-Null
-          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\xgo.exe" "$env:USERPROFILE\go\bin\xgo.exe" -Force
-          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\gop.exe" "$env:USERPROFILE\go\bin\gop.exe" -Force
-          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\goptestgo.exe" "$env:USERPROFILE\go\bin\goptestgo.exe" -Force
           "$env:USERPROFILE\go\bin" >> $env:GITHUB_PATH
       - name: Test backend
         shell: pwsh
@@ -73,10 +69,6 @@ jobs:
           git clone https://github.com/goplus/xgo.git "$env:RUNNER_TEMP\xgo-src"
           Set-Location "$env:RUNNER_TEMP\xgo-src"
           cmd /c make.bat
-          New-Item -ItemType Directory -Force "$env:USERPROFILE\go\bin" | Out-Null
-          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\xgo.exe" "$env:USERPROFILE\go\bin\xgo.exe" -Force
-          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\gop.exe" "$env:USERPROFILE\go\bin\gop.exe" -Force
-          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\goptestgo.exe" "$env:USERPROFILE\go\bin\goptestgo.exe" -Force
           "$env:USERPROFILE\go\bin" >> $env:GITHUB_PATH
       - name: Install web dependencies
         shell: pwsh
