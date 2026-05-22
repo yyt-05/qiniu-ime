@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Install XGo
+        shell: pwsh
+        run: |
+          git clone https://github.com/goplus/xgo.git "$env:RUNNER_TEMP\xgo-src"
+          Set-Location "$env:RUNNER_TEMP\xgo-src"
+          cmd /c make.bat
+          New-Item -ItemType Directory -Force "$env:USERPROFILE\go\bin" | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\xgo.exe" "$env:USERPROFILE\go\bin\xgo.exe" -Force
+          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\gop.exe" "$env:USERPROFILE\go\bin\gop.exe" -Force
+          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\goptestgo.exe" "$env:USERPROFILE\go\bin\goptestgo.exe" -Force
+          "$env:USERPROFILE\go\bin" >> $env:GITHUB_PATH
+      - name: Test backend
+        shell: pwsh
+        run: |
+          Set-Location server
+          xgo test ./...
+          xgo go ./...
+          go test "-coverprofile=coverage.out" ./api ./application ./domain ./infrastructure/provider/failing ./infrastructure/provider/local ./infrastructure/provider/mock ./infrastructure/storage
+          go tool cover "-func=coverage.out"
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.9 --activate
+      - name: Install web dependencies
+        run: pnpm --dir app/web install --frozen-lockfile
+      - name: Build web
+        run: pnpm --dir app/web build
+      - name: Unit test web
+        run: pnpm --dir app/web exec vitest run --coverage
+
+  e2e:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Enable pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.9 --activate
+      - name: Install XGo
+        shell: pwsh
+        run: |
+          git clone https://github.com/goplus/xgo.git "$env:RUNNER_TEMP\xgo-src"
+          Set-Location "$env:RUNNER_TEMP\xgo-src"
+          cmd /c make.bat
+          New-Item -ItemType Directory -Force "$env:USERPROFILE\go\bin" | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\xgo.exe" "$env:USERPROFILE\go\bin\xgo.exe" -Force
+          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\gop.exe" "$env:USERPROFILE\go\bin\gop.exe" -Force
+          Copy-Item "$env:RUNNER_TEMP\xgo-src\bin\goptestgo.exe" "$env:USERPROFILE\go\bin\goptestgo.exe" -Force
+          "$env:USERPROFILE\go\bin" >> $env:GITHUB_PATH
+      - name: Install web dependencies
+        shell: pwsh
+        run: pnpm --dir app/web install --frozen-lockfile
+      - name: Install Playwright browser
+        shell: pwsh
+        run: pnpm --dir app/web exec playwright install chromium
+      - name: Run E2E
+        shell: pwsh
+        run: pnpm --dir app/web exec playwright test
