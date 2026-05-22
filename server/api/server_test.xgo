@@ -1,0 +1,140 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"github.com/gorilla/websocket"
+	"qiniu-ime/server/application"
+	"qiniu-ime/server/infrastructure/provider/failing"
+	"qiniu-ime/server/infrastructure/provider/mock"
+	"qiniu-ime/server/infrastructure/storage"
+	"qiniu-ime/server/ports"
+)
+
+func newTestServer() (*httptest.Server, *Server) {
+	store := storage.NewInMemoryStore()
+	router := application.NewProviderRouter([]ports.ASRProvider{
+		mock.NewProvider(),
+		failing.NewProvider("xfyun"),
+	})
+	service := application.NewSessionService(router, store)
+	api := NewServer(service, store)
+	return httptest.NewServer(api.Routes()), api
+}
+
+func TestHealthAndMemoryEndpoints(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+	resp, err := http.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("health status: %d", resp.StatusCode)
+	}
+	resp, err = http.Get(ts.URL + "/api/memory")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("memory status: %d", resp.StatusCode)
+	}
+}
+
+func TestMemoryTermsAndAccept(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+	body := bytes.NewBufferString(`{"terms":[{"term":"七牛云","aliases":["七牛"],"scene":"work","enabled":true}]}`)
+	resp, err := http.Post(ts.URL + "/api/memory/terms", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("terms status: %d", resp.StatusCode)
+	}
+	body = bytes.NewBufferString(`{"rawText":"小王","acceptedText":"王小明","scene":"chat"}`)
+	resp, err = http.Post(ts.URL + "/api/sessions/test/accept", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	if out["learned"] != true {
+		t.Fatalf("accept mismatch: %#v", out)
+	}
+}
+
+func TestEvalAndMetricsEndpoints(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+	body := bytes.NewBufferString(`{"items":[{"expected":"我们用 XGo","raw":"我们用 x go","corrected":"我们用 XGo","firstTokenMs":700,"finalMs":1100}]}`)
+	resp, err := http.Post(ts.URL + "/api/eval/report", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("eval status: %d", resp.StatusCode)
+	}
+	resp, err = http.Get(ts.URL + "/api/metrics/summary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("metrics status: %d", resp.StatusCode)
+	}
+}
+
+func TestASRWebSocketHappyPath(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/asr"
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := conn.WriteJSON(map[string]any{"type":"session.start", "scene":"work", "provider":"mock", "postprocessMode":"light", "mockText":"我们用扣豆上传文件"}); err != nil {
+		t.Fatal(err)
+	}
+	var msg map[string]any
+	if err := conn.ReadJSON(&msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg["type"] != "session.ready" {
+		t.Fatalf("ready mismatch: %#v", msg)
+	}
+	conn.WriteJSON(map[string]any{"type":"audio.chunk", "seq":1, "pcm":"AA=="})
+	conn.ReadJSON(&msg)
+	if msg["type"] != "transcript.partial" {
+		t.Fatalf("partial mismatch: %#v", msg)
+	}
+	conn.WriteJSON(map[string]any{"type":"audio.end"})
+	conn.ReadJSON(&msg)
+	if msg["type"] != "transcript.final" || !strings.Contains(msg["correctedText"].(string), "Kodo") {
+		t.Fatalf("final mismatch: %#v", msg)
+	}
+}
+
+func TestASRWebSocketFailsFastProvider(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/asr"
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.WriteJSON(map[string]any{"type":"session.start", "provider":"xfyun"})
+	var msg map[string]any
+	if err := conn.ReadJSON(&msg); err != nil {
+		t.Fatal(err)
+	}
+	if msg["type"] != "error" {
+		t.Fatalf("expected error: %#v", msg)
+	}
+}
+

@@ -1,0 +1,71 @@
+package domain
+
+import "strings"
+
+func NormalizeMode(mode string) string {
+	switch mode {
+	case "raw", "light", "clean", "logic":
+		return mode
+	case "":
+		return "light"
+	default:
+		panic("unsupported postprocess mode: " + mode)
+	}
+}
+
+func ApplyPostprocessMode(text string, mode string) string {
+	mode = NormalizeMode(mode)
+	out := strings.TrimSpace(text)
+	if out == "" {
+		return out
+	}
+	switch mode {
+	case "raw":
+		return out
+	case "light":
+		out = cleanupRepeatedPunctuation(out)
+		return ensureSentencePunctuation(out)
+	case "clean":
+		out = removeFillers(out)
+		out = cleanupRepeatedPunctuation(out)
+		return ensureSentencePunctuation(out)
+	case "logic":
+		out = removeFillers(out)
+		out = cleanupRepeatedPunctuation(out)
+		return ensureSentencePunctuation(out)
+	default:
+		panic("unsupported postprocess mode: " + mode)
+	}
+}
+
+func removeFillers(text string) string {
+	replacements := []string{"嗯嗯", "嗯", "啊", "那个", "就是说", "然后然后"}
+	out := text
+	for _, filler := range replacements {
+		out = strings.ReplaceAll(out, filler, "")
+	}
+	return strings.Join(strings.Fields(out), "")
+}
+
+func cleanupRepeatedPunctuation(text string) string {
+	out := text
+	for strings.Contains(out, "。。") {
+		out = strings.ReplaceAll(out, "。。", "。")
+	}
+	for strings.Contains(out, "，，") {
+		out = strings.ReplaceAll(out, "，，", "，")
+	}
+	return out
+}
+
+func ensureSentencePunctuation(text string) string {
+	if text == "" {
+		return text
+	}
+	last := []rune(text)[len([]rune(text))-1]
+	if last == '。' || last == '！' || last == '？' || last == '.' || last == '!' || last == '?' {
+		return text
+	}
+	return text + "。"
+}
+

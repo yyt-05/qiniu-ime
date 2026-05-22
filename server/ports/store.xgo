@@ -1,0 +1,10 @@
+package ports
+
+import "qiniu-ime/server/domain"
+
+type MemoryStore interface {
+	ListTerms() []domain.MemoryTerm
+	AddTerms(terms []domain.MemoryTerm) []domain.MemoryTerm
+	RecordCorrection(event domain.CorrectionEvent) *domain.MemoryTerm
+}
+

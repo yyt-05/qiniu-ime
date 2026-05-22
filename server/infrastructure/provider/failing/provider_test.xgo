@@ -1,0 +1,18 @@
+package failing
+
+import (
+	"testing"
+	"qiniu-ime/server/domain"
+)
+
+func TestFailingProviderFailsFast(t *testing.T) {
+	provider := NewProvider("xfyun")
+	if provider.Name() != "xfyun" {
+		t.Fatal("name mismatch")
+	}
+	_, err := provider.Start(domain.ASRSessionConfig{})
+	if err == nil {
+		t.Fatal("expected provider config error")
+	}
+}
+

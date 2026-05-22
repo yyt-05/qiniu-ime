@@ -1,0 +1,91 @@
+package domain
+
+import "sort"
+
+func CER(expected string, actual string) float64 {
+	exp := []rune(expected)
+	act := []rune(actual)
+	if len(exp) == 0 {
+		if len(act) == 0 {
+			return 0
+		}
+		return 1
+	}
+	dist := levenshtein(exp, act)
+	return float64(dist) / float64(len(exp))
+}
+
+func BuildEvalReport(items []EvalItem) EvalReport {
+	if len(items) == 0 {
+		return EvalReport{}
+	}
+	before := 0.0
+	after := 0.0
+	first := []int64{}
+	final := []int64{}
+	for _, item := range items {
+		before += CER(item.Expected, item.Raw)
+		after += CER(item.Expected, item.Corrected)
+		first = append(first, item.FirstTokenMs)
+		final = append(final, item.FinalMs)
+	}
+	sort.Slice(first, func(i, j int) bool { return first[i] < first[j] })
+	sort.Slice(final, func(i, j int) bool { return final[i] < final[j] })
+	return EvalReport{
+		CERBefore: before / float64(len(items)),
+		CERAfter: after / float64(len(items)),
+		HotwordHitRate: estimateHotwordHitRate(items),
+		P50FirstTokenMs: first[len(first)/2],
+		P50FinalMs: final[len(final)/2],
+	}
+}
+
+func estimateHotwordHitRate(items []EvalItem) float64 {
+	if len(items) == 0 {
+		return 0
+	}
+	improved := 0
+	for _, item := range items {
+		if CER(item.Expected, item.Corrected) <= CER(item.Expected, item.Raw) {
+			improved++
+		}
+	}
+	return float64(improved) / float64(len(items))
+}
+
+func levenshtein(a []rune, b []rune) int {
+	dp := make([][]int, len(a)+1)
+	for i := range dp {
+		dp[i] = make([]int, len(b)+1)
+	}
+	for i := 0; i <= len(a); i++ {
+		dp[i][0] = i
+	}
+	for j := 0; j <= len(b); j++ {
+		dp[0][j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			dp[i][j] = minInt(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost)
+		}
+	}
+	return dp[len(a)][len(b)]
+}
+
+func minInt(a int, b int, c int) int {
+	if a < b {
+		if a < c {
+			return a
+		}
+		return c
+	}
+	if b < c {
+		return b
+	}
+	return c
+}
+

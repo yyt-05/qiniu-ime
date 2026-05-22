@@ -1,0 +1,67 @@
+package storage
+
+import (
+	"fmt"
+	"sync"
+	"qiniu-ime/server/domain"
+)
+
+type InMemoryStore struct {
+	mu sync.Mutex
+	terms []domain.MemoryTerm
+	corrections []domain.CorrectionEvent
+	nextID int
+}
+
+func NewInMemoryStore() *InMemoryStore {
+	store := &InMemoryStore{nextID: 1}
+	store.AddTerms([]domain.MemoryTerm{
+		{Term: "Kodo", Aliases: []string{"扣豆", "可豆"}, Scene: "work", Weight: 1, Enabled: true},
+		{Term: "XGo", Aliases: []string{"x go", "艾克斯 go", "叉 go"}, Scene: "work", Weight: 1, Enabled: true},
+		{Term: "张小鱼", Aliases: []string{"张小雨", "小鱼"}, Scene: "chat", Weight: 1, Enabled: true},
+	})
+	return store
+}
+
+func (s *InMemoryStore) ListTerms() []domain.MemoryTerm {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]domain.MemoryTerm, len(s.terms))
+	copy(out, s.terms)
+	return out
+}
+
+func (s *InMemoryStore) AddTerms(terms []domain.MemoryTerm) []domain.MemoryTerm {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	added := []domain.MemoryTerm{}
+	for _, term := range terms {
+		if term.Term == "" {
+			panic("memory term cannot be empty")
+		}
+		if !term.Enabled {
+			term.Enabled = true
+		}
+		if term.Weight == 0 {
+			term.Weight = 1
+		}
+		term.ID = fmt.Sprintf("mem_%d", s.nextID)
+		s.nextID++
+		s.terms = append(s.terms, term)
+		added = append(added, term)
+	}
+	return added
+}
+
+func (s *InMemoryStore) RecordCorrection(event domain.CorrectionEvent) *domain.MemoryTerm {
+	s.mu.Lock()
+	s.corrections = append(s.corrections, event)
+	s.mu.Unlock()
+	candidate := domain.ExtractMemoryCandidate(event.RawText, event.AcceptedText, event.Scene)
+	if candidate == nil {
+		return nil
+	}
+	added := s.AddTerms([]domain.MemoryTerm{*candidate})
+	return &added[0]
+}
+

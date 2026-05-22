@@ -1,0 +1,69 @@
+package domain
+
+type AudioChunk struct {
+	Seq int64
+	PCM string
+}
+
+type ASRSessionConfig struct {
+	Scene string
+	SampleRate int
+	Format string
+	EnableMemory bool
+	Provider string
+	PostprocessMode string
+	MockText string
+}
+
+type TranscriptEvent struct {
+	Type string `json:"type"`
+	Seq int64 `json:"seq,omitempty"`
+	Text string `json:"text,omitempty"`
+	RawText string `json:"rawText,omitempty"`
+	CorrectedText string `json:"correctedText,omitempty"`
+	AppliedRules []AppliedRule `json:"appliedRules,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	PostprocessMode string `json:"postprocessMode,omitempty"`
+	LatencyMs int64 `json:"latencyMs,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+type AppliedRule struct {
+	From string `json:"from"`
+	To string `json:"to"`
+	Source string `json:"source"`
+}
+
+type MemoryTerm struct {
+	ID string `json:"id"`
+	Term string `json:"term"`
+	Aliases []string `json:"aliases"`
+	Scene string `json:"scene"`
+	Weight float64 `json:"weight"`
+	HitCount int `json:"hitCount"`
+	RejectCount int `json:"rejectCount"`
+	Enabled bool `json:"enabled"`
+}
+
+type CorrectionEvent struct {
+	RawText string `json:"rawText"`
+	AcceptedText string `json:"acceptedText"`
+	Scene string `json:"scene"`
+}
+
+type EvalItem struct {
+	Expected string `json:"expected"`
+	Raw string `json:"raw"`
+	Corrected string `json:"corrected"`
+	FirstTokenMs int64 `json:"firstTokenMs"`
+	FinalMs int64 `json:"finalMs"`
+}
+
+type EvalReport struct {
+	CERBefore float64 `json:"cerBefore"`
+	CERAfter float64 `json:"cerAfter"`
+	HotwordHitRate float64 `json:"hotwordHitRate"`
+	P50FirstTokenMs int64 `json:"p50FirstTokenMs"`
+	P50FinalMs int64 `json:"p50FinalMs"`
+}
+

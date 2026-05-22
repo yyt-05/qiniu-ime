@@ -1,0 +1,33 @@
+package storage
+
+import (
+	"testing"
+	"qiniu-ime/server/domain"
+)
+
+func TestInMemoryStore(t *testing.T) {
+	store := NewInMemoryStore()
+	initial := store.ListTerms()
+	if len(initial) == 0 {
+		t.Fatal("expected seed terms")
+	}
+	added := store.AddTerms([]domain.MemoryTerm{{Term: "张小鱼", Aliases: []string{"小鱼"}, Scene: "chat"}})
+	if len(added) != 1 || added[0].ID == "" {
+		t.Fatalf("add mismatch: %#v", added)
+	}
+	candidate := store.RecordCorrection(domain.CorrectionEvent{RawText: "小王", AcceptedText: "王小明", Scene: "chat"})
+	if candidate == nil || candidate.Term != "王小明" {
+		t.Fatalf("candidate mismatch: %#v", candidate)
+	}
+}
+
+func TestInMemoryStoreRejectsEmptyTerm(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+	store := NewInMemoryStore()
+	store.AddTerms([]domain.MemoryTerm{{Term: ""}})
+}
+

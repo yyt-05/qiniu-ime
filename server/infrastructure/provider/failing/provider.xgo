@@ -1,0 +1,25 @@
+package failing
+
+import (
+	"errors"
+	"qiniu-ime/server/domain"
+	"qiniu-ime/server/ports"
+)
+
+type Provider struct {
+	name string
+}
+
+func NewProvider(name string) *Provider {
+	return &Provider{name: name}
+}
+
+func (p *Provider) Name() string {
+	return p.name
+}
+
+func (p *Provider) Start(cfg domain.ASRSessionConfig) (ports.ASRStream, error) {
+	return nil, errors.New("provider " + p.name + " is not configured")
+}
+
+type Stream struct {}

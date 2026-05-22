@@ -1,0 +1,30 @@
+package application
+
+import (
+	"fmt"
+	"qiniu-ime/server/ports"
+)
+
+type ProviderRouter struct {
+	providers map[string]ports.ASRProvider
+}
+
+func NewProviderRouter(providers []ports.ASRProvider) *ProviderRouter {
+	m := map[string]ports.ASRProvider{}
+	for _, provider := range providers {
+		m[provider.Name()] = provider
+	}
+	return &ProviderRouter{providers: m}
+}
+
+func (r *ProviderRouter) Select(name string) (ports.ASRProvider, error) {
+	if name == "" || name == "auto" {
+		name = "mock"
+	}
+	provider, ok := r.providers[name]
+	if !ok {
+		return nil, fmt.Errorf("unsupported provider: %s", name)
+	}
+	return provider, nil
+}
+

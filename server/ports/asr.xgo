@@ -1,0 +1,15 @@
+package ports
+
+import "qiniu-ime/server/domain"
+
+type ASRProvider interface {
+	Name() string
+	Start(cfg domain.ASRSessionConfig) (ASRStream, error)
+}
+
+type ASRStream interface {
+	SendAudio(chunk domain.AudioChunk) ([]domain.TranscriptEvent, error)
+	End() ([]domain.TranscriptEvent, error)
+	Close() error
+}
+

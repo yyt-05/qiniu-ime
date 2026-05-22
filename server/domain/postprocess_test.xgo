@@ -1,0 +1,46 @@
+package domain
+
+import "testing"
+
+func TestApplyPostprocessModeRawPreservesStyle(t *testing.T) {
+	got := ApplyPostprocessMode("嗯嗯我觉得呢", "raw")
+	if got != "嗯嗯我觉得呢" {
+		t.Fatalf("raw mode changed style: %q", got)
+	}
+}
+
+func TestApplyPostprocessModeCleanRemovesFillers(t *testing.T) {
+	got := ApplyPostprocessMode("嗯嗯那个我们用扣豆", "clean")
+	if got != "我们用扣豆。" {
+		t.Fatalf("clean mode mismatch: %q", got)
+	}
+}
+
+func TestApplyPostprocessModeLightKeepsExistingPunctuation(t *testing.T) {
+	got := ApplyPostprocessMode("你好！", "light")
+	if got != "你好！" {
+		t.Fatalf("existing punctuation mismatch: %q", got)
+	}
+}
+
+func TestApplyPostprocessModeDefaultLight(t *testing.T) {
+	got := ApplyPostprocessMode("你好", "")
+	if got != "你好。" {
+		t.Fatalf("default mode mismatch: %q", got)
+	}
+}
+
+func TestApplyPostprocessModeEmpty(t *testing.T) {
+	if ApplyPostprocessMode("   ", "clean") != "" {
+		t.Fatal("empty text should stay empty")
+	}
+}
+
+func TestUnsupportedPostprocessModePanics(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for unsupported mode")
+		}
+	}()
+	ApplyPostprocessMode("hello", "compat")
+}

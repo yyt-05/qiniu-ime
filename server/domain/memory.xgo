@@ -1,0 +1,46 @@
+package domain
+
+import "strings"
+
+func ApplyMemory(text string, terms []MemoryTerm, scene string) (string, []AppliedRule) {
+	out := text
+	applied := []AppliedRule{}
+	for _, term := range terms {
+		if !term.Enabled {
+			continue
+		}
+		if term.Scene != "" && scene != "" && term.Scene != scene {
+			continue
+		}
+		for _, alias := range term.Aliases {
+			if alias == "" || alias == term.Term {
+				continue
+			}
+			if strings.Contains(out, alias) {
+				out = strings.ReplaceAll(out, alias, term.Term)
+				applied = append(applied, AppliedRule{From: alias, To: term.Term, Source: "personal_memory"})
+			}
+		}
+	}
+	return out, applied
+}
+
+func ExtractMemoryCandidate(raw string, accepted string, scene string) *MemoryTerm {
+	raw = strings.TrimSpace(raw)
+	accepted = strings.TrimSpace(accepted)
+	if raw == "" || accepted == "" || raw == accepted {
+		return nil
+	}
+	if len([]rune(raw)) > 40 || len([]rune(accepted)) > 40 {
+		return nil
+	}
+	return &MemoryTerm{
+		ID: "candidate",
+		Term: accepted,
+		Aliases: []string{raw},
+		Scene: scene,
+		Weight: 0.4,
+		Enabled: true,
+	}
+}
+

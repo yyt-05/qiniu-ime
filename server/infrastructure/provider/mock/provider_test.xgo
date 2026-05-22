@@ -1,0 +1,32 @@
+package mock
+
+import (
+	"testing"
+	"qiniu-ime/server/domain"
+)
+
+func TestMockProviderStream(t *testing.T) {
+	provider := NewProvider()
+	stream, err := provider.Start(domain.ASRSessionConfig{MockText: "测试文本"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	partials, err := stream.SendAudio(domain.AudioChunk{Seq: 1, PCM: "AA=="})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(partials) != 1 || partials[0].Type != "transcript.partial" {
+		t.Fatalf("partial mismatch: %#v", partials)
+	}
+	finals, err := stream.End()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if finals[0].RawText != "测试文本" {
+		t.Fatalf("final mismatch: %#v", finals)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+

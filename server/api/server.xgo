@@ -1,0 +1,284 @@
+package api
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+	"github.com/gorilla/websocket"
+	"qiniu-ime/server/application"
+	"qiniu-ime/server/domain"
+	"qiniu-ime/server/ports"
+)
+
+type Server struct {
+	sessionService *application.SessionService
+	store ports.MemoryStore
+	metrics *Metrics
+	upgrader websocket.Upgrader
+}
+
+type Metrics struct {
+	mu sync.Mutex
+	Sessions int `json:"sessions"`
+	ProviderErrors int `json:"providerErrors"`
+	FirstTokenMs []int64 `json:"firstTokenMs"`
+	FinalMs []int64 `json:"finalMs"`
+}
+
+func NewServer(sessionService *application.SessionService, store ports.MemoryStore) *Server {
+	return &Server{
+		sessionService: sessionService,
+		store: store,
+		metrics: &Metrics{},
+		upgrader: websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
+	}
+}
+
+func (s *Server) Routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/ws/asr", s.handleASR)
+	mux.HandleFunc("/api/memory", s.handleMemory)
+	mux.HandleFunc("/api/memory/terms", s.handleMemoryTerms)
+	mux.HandleFunc("/api/sessions/", s.handleSessionAccept)
+	mux.HandleFunc("/api/eval/report", s.handleEvalReport)
+	mux.HandleFunc("/api/metrics/summary", s.handleMetrics)
+	return withCORS(mux)
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "qiniu-ime"})
+}
+
+func (s *Server) handleMemory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"terms": s.store.ListTerms()})
+}
+
+func (s *Server) handleMemoryTerms(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var body struct {
+		Terms []domain.MemoryTerm `json:"terms"`
+	}
+	mustDecode(r, &body)
+	added := s.store.AddTerms(body.Terms)
+	writeJSON(w, http.StatusOK, map[string]any{"terms": added})
+}
+
+func (s *Server) handleSessionAccept(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if !strings.HasSuffix(r.URL.Path, "/accept") {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+	var body struct {
+		RawText string `json:"rawText"`
+		AcceptedText string `json:"acceptedText"`
+		Scene string `json:"scene"`
+	}
+	mustDecode(r, &body)
+	candidate := s.store.RecordCorrection(domain.CorrectionEvent{
+		RawText: body.RawText,
+		AcceptedText: body.AcceptedText,
+		Scene: body.Scene,
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"learned": candidate != nil, "memoryCandidate": candidate})
+}
+
+func (s *Server) handleEvalReport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var body struct {
+		Items []domain.EvalItem `json:"items"`
+	}
+	mustDecode(r, &body)
+	writeJSON(w, http.StatusOK, domain.BuildEvalReport(body.Items))
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	s.metrics.mu.Lock()
+	defer s.metrics.mu.Unlock()
+	writeJSON(w, http.StatusOK, s.metrics)
+}
+
+func (s *Server) handleASR(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	var session *application.Session
+	for {
+		var msg map[string]any
+		err := conn.ReadJSON(&msg)
+		if err != nil {
+			return
+		}
+		msgType, _ := msg["type"].(string)
+		switch msgType {
+		case "session.start":
+			cfg := parseSessionConfig(msg)
+			started, err := s.sessionService.Start(cfg)
+			if err != nil {
+				s.recordProviderError()
+				mustWrite(conn, domain.TranscriptEvent{Type: "error", Error: err.Error()})
+				return
+			}
+			session = started
+			s.recordSession()
+			mustWrite(conn, map[string]any{"type": "session.ready", "provider": cfg.Provider, "traceId": time.Now().UnixNano()})
+		case "audio.chunk":
+			if session == nil {
+				mustWrite(conn, domain.TranscriptEvent{Type: "error", Error: "session not started"})
+				return
+			}
+			seq := int64(number(msg["seq"]))
+			pcm, _ := msg["pcm"].(string)
+			events, err := session.SendAudio(domain.AudioChunk{Seq: seq, PCM: pcm})
+			if err != nil {
+				mustWrite(conn, domain.TranscriptEvent{Type: "error", Error: err.Error()})
+				return
+			}
+			for _, event := range events {
+				s.recordEvent(event)
+				mustWrite(conn, event)
+			}
+		case "audio.end":
+			if session == nil {
+				mustWrite(conn, domain.TranscriptEvent{Type: "error", Error: "session not started"})
+				return
+			}
+			events, err := session.End()
+			if err != nil {
+				mustWrite(conn, domain.TranscriptEvent{Type: "error", Error: err.Error()})
+				return
+			}
+			for _, event := range events {
+				s.recordEvent(event)
+				mustWrite(conn, event)
+			}
+			session.Close()
+			return
+		default:
+			mustWrite(conn, domain.TranscriptEvent{Type: "error", Error: "unsupported message type: " + msgType})
+			return
+		}
+	}
+}
+
+func parseSessionConfig(msg map[string]any) domain.ASRSessionConfig {
+	return domain.ASRSessionConfig{
+		Scene: stringValue(msg["scene"], "chat"),
+		SampleRate: number(msg["sampleRate"]),
+		Format: stringValue(msg["format"], "pcm16"),
+		EnableMemory: boolValue(msg["enableMemory"], true),
+		Provider: stringValue(msg["provider"], "auto"),
+		PostprocessMode: stringValue(msg["postprocessMode"], "light"),
+		MockText: stringValue(msg["mockText"], ""),
+	}
+}
+
+func (s *Server) recordSession() {
+	s.metrics.mu.Lock()
+	defer s.metrics.mu.Unlock()
+	s.metrics.Sessions++
+}
+
+func (s *Server) recordProviderError() {
+	s.metrics.mu.Lock()
+	defer s.metrics.mu.Unlock()
+	s.metrics.ProviderErrors++
+}
+
+func (s *Server) recordEvent(event domain.TranscriptEvent) {
+	s.metrics.mu.Lock()
+	defer s.metrics.mu.Unlock()
+	if event.Type == "transcript.partial" {
+		s.metrics.FirstTokenMs = append(s.metrics.FirstTokenMs, event.LatencyMs)
+	}
+	if event.Type == "transcript.final" {
+		s.metrics.FinalMs = append(s.metrics.FinalMs, event.LatencyMs)
+	}
+	log.Printf(`{"event":"%s","provider":"%s","latency_ms":%d}`, event.Type, event.Provider, event.LatencyMs)
+}
+
+func mustWrite(conn *websocket.Conn, value any) {
+	if err := conn.WriteJSON(value); err != nil {
+		panic(err)
+	}
+}
+
+func mustDecode(r *http.Request, value any) {
+	defer r.Body.Close()
+	if err := json.NewDecoder(r.Body).Decode(value); err != nil {
+		panic(err)
+	}
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		panic(err)
+	}
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]any{"error": message})
+}
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func stringValue(value any, fallback string) string {
+	got, ok := value.(string)
+	if !ok || got == "" {
+		return fallback
+	}
+	return got
+}
+
+func boolValue(value any, fallback bool) bool {
+	got, ok := value.(bool)
+	if !ok {
+		return fallback
+	}
+	return got
+}
+
+func number(value any) int {
+	switch v := value.(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
+	}
+}
+

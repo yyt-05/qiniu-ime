@@ -1,0 +1,41 @@
+package domain
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestApplyMemoryByScene(t *testing.T) {
+	terms := []MemoryTerm{{Term: "Kodo", Aliases: []string{"扣豆"}, Scene: "work", Enabled: true}}
+	got, rules := ApplyMemory("我们用扣豆上传文件", terms, "work")
+	if got != "我们用 Kodo 上传文件" && got != "我们用Kodo上传文件" {
+		t.Fatalf("memory mismatch: %q", got)
+	}
+	if len(rules) != 1 || rules[0].To != "Kodo" {
+		t.Fatalf("rules mismatch: %#v", rules)
+	}
+}
+
+func TestExtractMemoryCandidateSkipsSameText(t *testing.T) {
+	if ExtractMemoryCandidate("Kodo", "Kodo", "work") != nil {
+		t.Fatal("same text should not produce candidate")
+	}
+}
+
+func TestApplyMemorySkipsDisabledAndWrongScene(t *testing.T) {
+	terms := []MemoryTerm{
+		{Term: "Kodo", Aliases: []string{"扣豆"}, Scene: "chat", Enabled: true},
+		{Term: "XGo", Aliases: []string{"叉 go"}, Scene: "work", Enabled: false},
+	}
+	got, rules := ApplyMemory("扣豆和叉 go", terms, "work")
+	if got != "扣豆和叉 go" || len(rules) != 0 {
+		t.Fatalf("unexpected memory apply: %q %#v", got, rules)
+	}
+}
+
+func TestExtractMemoryCandidateSkipsLongText(t *testing.T) {
+	raw := strings.Repeat("长", 41)
+	if ExtractMemoryCandidate(raw, "Kodo", "work") != nil {
+		t.Fatal("long raw text should not produce candidate")
+	}
+}

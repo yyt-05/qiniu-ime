@@ -1,0 +1,29 @@
+package domain
+
+import "testing"
+
+func TestCER(t *testing.T) {
+	if CER("abc", "abc") != 0 {
+		t.Fatal("same text cer should be zero")
+	}
+	if CER("abc", "axc") <= 0 {
+		t.Fatal("different text cer should be positive")
+	}
+}
+
+func TestBuildEvalReport(t *testing.T) {
+	report := BuildEvalReport([]EvalItem{{
+		Expected: "我们用 XGo",
+		Raw: "我们用 x go",
+		Corrected: "我们用 XGo",
+		FirstTokenMs: 700,
+		FinalMs: 1100,
+	}})
+	if report.CERAfter > report.CERBefore {
+		t.Fatalf("after should not be worse: %#v", report)
+	}
+	if report.P50FirstTokenMs != 700 || report.P50FinalMs != 1100 {
+		t.Fatalf("latency mismatch: %#v", report)
+	}
+}
+

@@ -1,0 +1,16 @@
+package application
+
+import (
+	"testing"
+	"qiniu-ime/server/infrastructure/provider/mock"
+	"qiniu-ime/server/ports"
+)
+
+func TestProviderRouterUnsupportedProvider(t *testing.T) {
+	router := NewProviderRouter([]ports.ASRProvider{mock.NewProvider()})
+	_, err := router.Select("xfyun")
+	if err == nil {
+		t.Fatal("expected unsupported provider error")
+	}
+}
+

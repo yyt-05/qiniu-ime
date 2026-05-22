@@ -1,0 +1,69 @@
+package application
+
+import (
+	"time"
+	"qiniu-ime/server/domain"
+	"qiniu-ime/server/ports"
+)
+
+type SessionService struct {
+	router *ProviderRouter
+	store ports.MemoryStore
+}
+
+func NewSessionService(router *ProviderRouter, store ports.MemoryStore) *SessionService {
+	return &SessionService{router: router, store: store}
+}
+
+func (s *SessionService) Start(cfg domain.ASRSessionConfig) (*Session, error) {
+	provider, err := s.router.Select(cfg.Provider)
+	if err != nil {
+		return nil, err
+	}
+	cfg.PostprocessMode = domain.NormalizeMode(cfg.PostprocessMode)
+	stream, err := provider.Start(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &Session{cfg: cfg, provider: provider, stream: stream, store: s.store, started: time.Now()}, nil
+}
+
+type Session struct {
+	cfg domain.ASRSessionConfig
+	provider ports.ASRProvider
+	stream ports.ASRStream
+	store ports.MemoryStore
+	started time.Time
+}
+
+func (s *Session) SendAudio(chunk domain.AudioChunk) ([]domain.TranscriptEvent, error) {
+	return s.stream.SendAudio(chunk)
+}
+
+func (s *Session) End() ([]domain.TranscriptEvent, error) {
+	events, err := s.stream.End()
+	if err != nil {
+		return nil, err
+	}
+	out := []domain.TranscriptEvent{}
+	for _, event := range events {
+		if event.Type == "transcript.final" {
+			corrected, rules := domain.ApplyMemory(event.RawText, s.store.ListTerms(), s.cfg.Scene)
+			corrected = domain.ApplyPostprocessMode(corrected, s.cfg.PostprocessMode)
+			event.CorrectedText = corrected
+			event.AppliedRules = rules
+			event.PostprocessMode = s.cfg.PostprocessMode
+			event.Provider = s.provider.Name()
+			if event.LatencyMs == 0 {
+				event.LatencyMs = int64(time.Since(s.started) / time.Millisecond)
+			}
+		}
+		out = append(out, event)
+	}
+	return out, nil
+}
+
+func (s *Session) Close() error {
+	return s.stream.Close()
+}
+

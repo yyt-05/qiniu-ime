@@ -1,0 +1,62 @@
+package mock
+
+import (
+	"time"
+	"qiniu-ime/server/domain"
+	"qiniu-ime/server/ports"
+)
+
+type Provider struct {}
+
+func NewProvider() *Provider {
+	return &Provider{}
+}
+
+func (p *Provider) Name() string {
+	return "mock"
+}
+
+func (p *Provider) Start(cfg domain.ASRSessionConfig) (ports.ASRStream, error) {
+	text := cfg.MockText
+	if text == "" {
+		text = "我们用扣豆上传文件"
+	}
+	return &Stream{text: text, provider: p.Name(), started: time.Now()}, nil
+}
+
+type Stream struct {
+	text string
+	provider string
+	started time.Time
+	seenAudio bool
+}
+
+func (s *Stream) SendAudio(chunk domain.AudioChunk) ([]domain.TranscriptEvent, error) {
+	s.seenAudio = true
+	partial := s.text
+	runes := []rune(partial)
+	if len(runes) > 6 {
+		partial = string(runes[:6])
+	}
+	return []domain.TranscriptEvent{{
+		Type: "transcript.partial",
+		Seq: chunk.Seq,
+		Text: partial,
+		Provider: s.provider,
+		LatencyMs: int64(time.Since(s.started) / time.Millisecond),
+	}}, nil
+}
+
+func (s *Stream) End() ([]domain.TranscriptEvent, error) {
+	return []domain.TranscriptEvent{{
+		Type: "transcript.final",
+		RawText: s.text,
+		Text: s.text,
+		Provider: s.provider,
+		LatencyMs: int64(time.Since(s.started) / time.Millisecond),
+	}}, nil
+}
+
+func (s *Stream) Close() error {
+	return nil
+}

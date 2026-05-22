@@ -1,0 +1,37 @@
+package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+	"qiniu-ime/server/api"
+	"qiniu-ime/server/application"
+	"qiniu-ime/server/infrastructure/provider/failing"
+	"qiniu-ime/server/infrastructure/provider/mock"
+	"qiniu-ime/server/infrastructure/storage"
+	"qiniu-ime/server/ports"
+)
+
+func main() {
+	store := storage.NewInMemoryStore()
+	providers := []ports.ASRProvider{
+		mock.NewProvider(),
+		failing.NewProvider("xfyun"),
+		failing.NewProvider("aliyun"),
+		failing.NewProvider("tencent"),
+		failing.NewProvider("openai"),
+		failing.NewProvider("local"),
+	}
+	router := application.NewProviderRouter(providers)
+	sessionService := application.NewSessionService(router, store)
+	server := api.NewServer(sessionService, store)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8787"
+	}
+	log.Printf("qiniu-ime XGo backend listening on :%s", port)
+	if err := http.ListenAndServe(":" + port, server.Routes()); err != nil {
+		panic(err)
+	}
+}
+
