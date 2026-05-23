@@ -48,6 +48,40 @@ git pull --rebase origin main
 git push -u origin main
 ```
 
+## Pull Request Rules
+
+Every PR must be small and single-purpose:
+
+- One PR implements or changes one feature, fix, workflow, or documentation concern.
+- Split large features into multiple independent PRs.
+- Do not mix unrelated refactors, formatting churn, generated files, local logs, build output, coverage output, or credentials.
+- After merge, `main` must stay runnable and the demo must remain reproducible.
+
+PR title:
+
+- One clear sentence describing what changed.
+- Avoid vague titles such as `update`, `optimize`, or `fix stuff`.
+
+PR description:
+
+```markdown
+## 功能描述
+
+说明本 PR 新增/修改了什么、解决什么问题、用户或评委如何使用。
+
+## 实现思路
+
+说明核心技术选择、主要模块、关键边界。
+
+## 测试方式
+
+- `command`: result
+
+## 风险与后续
+
+说明未覆盖边界、上线注意事项、后续 PR 继续处理什么。没有明显风险则写“暂无已知风险”。
+```
+
 ## Validation Before Push
 
 ```powershell
