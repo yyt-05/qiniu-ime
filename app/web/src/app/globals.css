@@ -2,13 +2,38 @@
 
 body {
   margin: 0;
-  background: #eef3f8;
-  color: #172033;
+  background: #0D1117;
+  color: #fff;
   font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  overflow: hidden;
+  scrollbar-color: #1f2937 #060a11;
+  scrollbar-width: thin;
 }
 
 button,
 input,
 select {
   font: inherit;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #060a11;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border: 2px solid #060a11;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #00ff88;
 }

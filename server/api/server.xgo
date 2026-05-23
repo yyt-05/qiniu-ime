@@ -44,6 +44,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/memory", s.handleMemory)
 	mux.HandleFunc("/api/memory/terms", s.handleMemoryTerms)
 	mux.HandleFunc("/api/sessions/", s.handleSessionAccept)
+	mux.HandleFunc("/api/transcripts/correct", s.handleTranscriptCorrect)
 	mux.HandleFunc("/api/eval/report", s.handleEvalReport)
 	mux.HandleFunc("/api/metrics/summary", s.handleMetrics)
 	return withCORS(mux)
@@ -95,6 +96,29 @@ func (s *Server) handleSessionAccept(w http.ResponseWriter, r *http.Request) {
 		Scene: body.Scene,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"learned": candidate != nil, "memoryCandidate": candidate})
+}
+
+func (s *Server) handleTranscriptCorrect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var body struct {
+		RawText string `json:"rawText"`
+		Scene string `json:"scene"`
+		PostprocessMode string `json:"postprocessMode"`
+	}
+	mustDecode(r, &body)
+	mode := domain.NormalizeMode(body.PostprocessMode)
+	corrected, rules := domain.ApplyMemory(body.RawText, s.store.ListTerms(), body.Scene)
+	corrected = domain.ApplyPostprocessMode(corrected, mode)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"rawText": body.RawText,
+		"correctedText": corrected,
+		"appliedRules": rules,
+		"provider": "browser",
+		"postprocessMode": mode,
+	})
 }
 
 func (s *Server) handleEvalReport(w http.ResponseWriter, r *http.Request) {
@@ -281,4 +305,3 @@ func number(value any) int {
 		return 0
 	}
 }
-

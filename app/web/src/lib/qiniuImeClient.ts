@@ -48,7 +48,7 @@ export class QiniuImeClient {
         }
       };
       this.socket.onopen = () => {
-        this.send({
+        if (!this.send({
           type: 'session.start',
           scene: options.scene,
           sampleRate: 16000,
@@ -57,7 +57,10 @@ export class QiniuImeClient {
           provider: options.provider,
           postprocessMode: options.postprocessMode,
           mockText: options.mockText
-        });
+        }) && !settled) {
+          settled = true;
+          reject(new Error('websocket connection failed'));
+        }
       };
       this.socket.onerror = () => {
         if (!settled) {
@@ -65,11 +68,17 @@ export class QiniuImeClient {
           reject(new Error('websocket connection failed'));
         }
       };
+      this.socket.onclose = () => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('websocket closed before session was ready'));
+        }
+      };
     });
   }
 
   sendAudio(seq: number, pcm = 'AA==') {
-    this.send({ type: 'audio.chunk', seq, pcm });
+    return this.send({ type: 'audio.chunk', seq, pcm });
   }
 
   async sendAudioBlob(seq: number, blob: Blob) {
@@ -78,21 +87,23 @@ export class QiniuImeClient {
     for (const byte of bytes) {
       binary += String.fromCharCode(byte);
     }
-    this.sendAudio(seq, btoa(binary));
+    return this.sendAudio(seq, btoa(binary));
   }
 
   endAudio() {
-    this.send({ type: 'audio.end' });
+    return this.send({ type: 'audio.end' });
   }
 
   close() {
     this.socket?.close();
+    this.socket = undefined;
   }
 
   private send(value: unknown) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      throw new Error('websocket is not open');
+      return false;
     }
     this.socket.send(JSON.stringify(value));
+    return true;
   }
 }

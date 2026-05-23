@@ -8,6 +8,7 @@ test('web workspace shows qiniu-ime UI', async ({ page }) => {
 
 test('mock ASR chain returns corrected text through XGo backend', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: /Mock 演示/ }).click();
   await page.getByRole('button', { name: /开始/ }).click();
   await expect(page.getByTestId('transcript-box')).toContainText('我们用扣豆');
   await page.getByRole('button', { name: /停止/ }).click();
@@ -15,11 +16,11 @@ test('mock ASR chain returns corrected text through XGo backend', async ({ page 
   await expect(page.getByText(/扣豆 -> Kodo/)).toBeVisible();
 });
 
-test('microphone mode sends browser audio chunks through WebSocket', async ({ page }) => {
+test('local microphone mode sends browser audio chunks through WebSocket', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: /麦克风/ }).click();
-  await page.getByRole('button', { name: /开始/ }).click();
-  await expect(page.getByTestId('transcript-box')).toContainText('我们用扣豆');
+  await page.getByLabel('provider').selectOption('local');
+  await page.getByRole('button', { name: '录音', exact: true }).click();
+  await expect(page.getByTestId('transcript-box')).toContainText('正在本地识别');
   await page.getByRole('button', { name: /停止/ }).click();
   await expect(page.getByTestId('transcript-box')).toContainText('Kodo');
 });
@@ -27,7 +28,7 @@ test('microphone mode sends browser audio chunks through WebSocket', async ({ pa
 test('local provider chain uses XGo provider boundary', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('provider').selectOption('local');
-  await page.getByRole('button', { name: /开始/ }).click();
+  await page.getByRole('button', { name: '录音', exact: true }).click();
   await expect(page.getByTestId('transcript-box')).toContainText('正在本地识别');
   await page.getByRole('button', { name: /停止/ }).click();
   await expect(page.getByTestId('transcript-box')).toContainText('Kodo');
@@ -36,6 +37,6 @@ test('local provider chain uses XGo provider boundary', async ({ page }) => {
 test('provider failure is visible and does not fallback silently', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('provider').selectOption('xfyun');
-  await page.getByRole('button', { name: /开始/ }).click();
+  await page.getByRole('button', { name: '录音', exact: true }).click();
   await expect(page.getByText(/provider xfyun is not configured/)).toBeVisible();
 });

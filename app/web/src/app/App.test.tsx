@@ -50,10 +50,45 @@ class FakeSocket {
   }
 }
 
+class FakeSpeechRecognition {
+  static instances: FakeSpeechRecognition[] = [];
+  continuous = false;
+  interimResults = false;
+  lang = '';
+  onresult: ((event: { resultIndex: number; results: Record<number, { isFinal: boolean; 0: { transcript: string } }> & { length: number } }) => void) | null = null;
+  onerror: ((event: { error: string }) => void) | null = null;
+  onend: (() => void) | null = null;
+
+  constructor() {
+    FakeSpeechRecognition.instances.push(this);
+  }
+
+  start() {}
+
+  stop() {
+    this.onend?.();
+  }
+
+  abort() {}
+
+  emitResult(text: string, isFinal = false) {
+    this.onresult?.({
+      resultIndex: 0,
+      results: {
+        0: { isFinal, 0: { transcript: text } },
+        length: 1
+      }
+    });
+  }
+}
+
 describe('App', () => {
   beforeEach(() => {
     FakeSocket.instances = [];
+    FakeSpeechRecognition.instances = [];
     vi.stubGlobal('WebSocket', FakeSocket);
+    vi.stubGlobal('SpeechRecognition', FakeSpeechRecognition);
+    vi.stubGlobal('webkitSpeechRecognition', FakeSpeechRecognition);
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.endsWith('/api/memory')) {
         return Response.json({ terms: [{ id: '1', term: 'Kodo', aliases: ['扣豆'], scene: 'work' }] });
@@ -67,12 +102,34 @@ describe('App', () => {
       if (url.includes('/accept')) {
         return Response.json({ learned: true });
       }
+      if (url.endsWith('/api/transcripts/correct')) {
+        return Response.json({
+          rawText: '我们用扣豆上传文件',
+          correctedText: '我们用 Kodo 上传文件。',
+          appliedRules: [{ from: '扣豆', to: 'Kodo', source: 'personal_memory' }],
+          provider: 'browser',
+          postprocessMode: 'light'
+        });
+      }
       return Response.json({});
     }));
   });
 
+  it('records browser speech and renders the corrected transcript', async () => {
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: '录音' }));
+    const recognition = FakeSpeechRecognition.instances[0];
+    recognition.emitResult('我们用扣豆上传文件');
+    await waitFor(() => expect(screen.getByTestId('transcript-box')).toHaveTextContent('扣豆'));
+    recognition.emitResult('我们用扣豆上传文件', true);
+    await userEvent.click(screen.getByRole('button', { name: /停止/ }));
+    await waitFor(() => expect(screen.getByTestId('transcript-box')).toHaveTextContent('Kodo'));
+    expect(screen.getByText(/扣豆 -> Kodo/)).toBeInTheDocument();
+  });
+
   it('runs a mock voice session and renders corrected text', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /Mock 演示/ }));
     await userEvent.click(screen.getByRole('button', { name: /开始/ }));
     await waitFor(() => expect(screen.getByTestId('transcript-box')).toHaveTextContent('我们用扣豆'));
     await userEvent.click(screen.getByRole('button', { name: /停止/ }));
@@ -88,9 +145,11 @@ describe('App', () => {
 
   it('accepts learning and can revert correction', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /Mock 演示/ }));
     await userEvent.click(screen.getByRole('button', { name: /开始/ }));
     await userEvent.click(screen.getByRole('button', { name: /停止/ }));
     await waitFor(() => expect(screen.getByTestId('transcript-box')).toHaveTextContent('Kodo'));
+    await userEvent.click(screen.getByText('更多操作'));
     await userEvent.click(screen.getByRole('button', { name: /撤回修正/ }));
     expect(screen.getByTestId('transcript-box')).toHaveTextContent('扣豆');
     await userEvent.click(screen.getByRole('button', { name: /确认学习/ }));
@@ -99,6 +158,7 @@ describe('App', () => {
 
   it('shows provider errors without fallback', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /Mock 演示/ }));
     await userEvent.selectOptions(screen.getByLabelText('provider'), 'xfyun');
     await userEvent.click(screen.getByRole('button', { name: /开始/ }));
     await waitFor(() => expect(screen.getByText(/provider xfyun/)).toBeInTheDocument());
@@ -106,6 +166,8 @@ describe('App', () => {
 
   it('switches postprocess modes', async () => {
     render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /Mock 演示/ }));
+    await userEvent.click(screen.getByText('后处理'));
     await userEvent.click(screen.getByRole('button', { name: '原声' }));
     await userEvent.click(screen.getByRole('button', { name: /开始/ }));
     await waitFor(() => expect(FakeSocket.instances.length).toBeGreaterThan(0));
