@@ -5,7 +5,25 @@ This workflow is for publishing `qiniu-ime` to GitHub without leaking local secr
 ## Repository
 
 - Remote: `https://github.com/yyt-05/qiniu-ime.git`
-- Default branch: `main`
+- Stable branch: `main`
+- Development branch: `develop`
+
+## Branch Model
+
+- `main` is the stable demo/release branch. It must always be runnable and reproducible.
+- `develop` is the integration branch for day-to-day work.
+- Feature branches must start from `develop`.
+- Pull requests for normal development should target `develop`.
+- `main` should only receive release/demo-ready changes from `develop`.
+
+Recommended branch naming:
+
+```text
+feat/<short-feature>
+fix/<short-bug>
+docs/<short-doc-change>
+ci/<short-ci-change>
+```
 
 ## Before Commit
 
@@ -33,19 +51,21 @@ Expected result: only provider names or documentation examples appear. Real keys
 
 ```powershell
 git init
-git branch -M main
+git switch -c develop
 git remote add origin https://github.com/yyt-05/qiniu-ime.git
 git add .
 git status --short
 git commit -m "feat: implement qiniu-ime prototype"
-git push -u origin main
+git push -u origin develop
 ```
 
 If the remote already has commits, pull with rebase first:
 
 ```powershell
-git pull --rebase origin main
-git push -u origin main
+git fetch origin
+git switch develop
+git pull --rebase origin develop
+git push -u origin develop
 ```
 
 ## Pull Request Rules
@@ -55,7 +75,7 @@ Every PR must be small and single-purpose:
 - One PR implements or changes one feature, fix, workflow, or documentation concern.
 - Split large features into multiple independent PRs.
 - Do not mix unrelated refactors, formatting churn, generated files, local logs, build output, coverage output, or credentials.
-- After merge, `main` must stay runnable and the demo must remain reproducible.
+- After merge, `develop` must stay runnable. `main` must stay demo/release-ready.
 
 PR title:
 
