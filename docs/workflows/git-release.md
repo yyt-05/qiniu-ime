@@ -5,7 +5,25 @@ This workflow is for publishing `qiniu-ime` to GitHub without leaking local secr
 ## Repository
 
 - Remote: `https://github.com/yyt-05/qiniu-ime.git`
-- Default branch: `main`
+- Stable branch: `main`
+- Development branch: `develop`
+
+## Branch Model
+
+- `main` is the stable demo/release branch. It must always be runnable and reproducible.
+- `develop` is the integration branch for day-to-day work.
+- Feature branches must start from `develop`.
+- Pull requests for normal development should target `develop`.
+- `main` should only receive release/demo-ready changes from `develop`.
+
+Recommended branch naming:
+
+```text
+feat/<short-feature>
+fix/<short-bug>
+docs/<short-doc-change>
+ci/<short-ci-change>
+```
 
 ## Before Commit
 
@@ -33,19 +51,55 @@ Expected result: only provider names or documentation examples appear. Real keys
 
 ```powershell
 git init
-git branch -M main
+git switch -c develop
 git remote add origin https://github.com/yyt-05/qiniu-ime.git
 git add .
 git status --short
 git commit -m "feat: implement qiniu-ime prototype"
-git push -u origin main
+git push -u origin develop
 ```
 
 If the remote already has commits, pull with rebase first:
 
 ```powershell
-git pull --rebase origin main
-git push -u origin main
+git fetch origin
+git switch develop
+git pull --rebase origin develop
+git push -u origin develop
+```
+
+## Pull Request Rules
+
+Every PR must be small and single-purpose:
+
+- One PR implements or changes one feature, fix, workflow, or documentation concern.
+- Split large features into multiple independent PRs.
+- Do not mix unrelated refactors, formatting churn, generated files, local logs, build output, coverage output, or credentials.
+- After merge, `develop` must stay runnable. `main` must stay demo/release-ready.
+
+PR title:
+
+- One clear sentence describing what changed.
+- Avoid vague titles such as `update`, `optimize`, or `fix stuff`.
+
+PR description:
+
+```markdown
+## 功能描述
+
+说明本 PR 新增/修改了什么、解决什么问题、用户或评委如何使用。
+
+## 实现思路
+
+说明核心技术选择、主要模块、关键边界。
+
+## 测试方式
+
+- `command`: result
+
+## 风险与后续
+
+说明未覆盖边界、上线注意事项、后续 PR 继续处理什么。没有明显风险则写“暂无已知风险”。
 ```
 
 ## Validation Before Push
